@@ -60,7 +60,7 @@ export default function MCPClient() {
                     <summary className="cursor-pointer text-sm text-blue-600">
                       View Input Schema
                     </summary>
-                    <pre className="mt-2 text-xs bg-gray-100 p-2 rounded overflow-auto">
+                    <pre className="mt-2 text-xs bg-gray-100 p-2 rounded overflow-auto text-gray-900">
                       {JSON.stringify(tool.inputSchema, null, 2)}
                     </pre>
                   </details>
