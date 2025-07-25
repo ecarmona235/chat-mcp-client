@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
 import { ChatMessage, ChatState, ChatContent } from '@/lib/types/chat';
-import { ProviderFactory } from '@/lib/providers/providerFactory';
 
 export function useChat() {
   const [chatState, setChatState] = useState<ChatState>({
@@ -12,7 +11,7 @@ export function useChat() {
   });
 
   const [providerIndex, setProviderIndex] = useState(0);
-  const availableProviders = ['openai', 'claude', 'gemini'];
+  const availableProviders = ['openai', 'gemini'];
 
   const getNextProvider = useCallback(() => {
     const nextIndex = (providerIndex + 1) % availableProviders.length;
@@ -57,16 +56,27 @@ export function useChat() {
     }));
 
     try {
-      const provider = ProviderFactory.getProvider(selectedProvider);
-      if (!provider) {
-        throw new Error(`Provider ${selectedProvider} not found`);
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [...chatState.messages, userMessage],
+          provider: selectedProvider,
+          model: selectedModel
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to get response');
       }
 
-      const response = await provider.sendMessage(chatState.messages, selectedModel);
-      
       const assistantMessage: ChatMessage = {
         role: 'assistant',
-        content: response,
+        content: data.content,
         timestamp: new Date()
       };
 
@@ -94,8 +104,13 @@ export function useChat() {
   }, []);
 
   const getAvailableModels = useCallback((provider: string) => {
-    const providerInstance = ProviderFactory.getProvider(provider);
-    return providerInstance?.models || [];
+    // Hardcoded models for now - could be fetched from API if needed
+          const modelMap: Record<string, string[]> = {
+        openai: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4o', 'gpt-4o-mini'],
+        // claude: ['Claude-Haiku-3', 'Claude-Haiku-3-5', 'Claude-Sonnet-4', 'Claude-Sonnet-3-7', 'Claude-Opus-4'],
+        gemini: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-Pro']
+      };
+    return modelMap[provider] || [];
   }, []);
 
   return {

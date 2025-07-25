@@ -1,14 +1,19 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { BaseProvider } from './baseProvider';
 import { ChatMessage, ChatContent } from '@/lib/types/chat';
+import { env } from "@/app/config/env";
+import { Logger } from "@/app/utils/logger";
+
+const logger = new Logger("ClaudeProvider");
+
 
 export class ClaudeProvider extends BaseProvider {
   name = 'claude';
-  models = ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'];
+  models = ['Claude-Haiku-3', 'Claude-Haiku-3-5', 'Claude-Sonnet-4', 'Claude-Sonnet-3-7', 'Claude-Opus-4'];
   private client: Anthropic | null = null;
 
   protected getApiKey(): string | null {
-    return process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY || null;
+    return env.ANTHROPIC_API_KEY || null;
   }
 
   private getClient(): Anthropic {
@@ -23,7 +28,7 @@ export class ClaudeProvider extends BaseProvider {
   async sendMessage(messages: ChatMessage[], model: string): Promise<ChatContent[]> {
     try {
       const client = this.getClient();
-      const selectedModel = model === 'auto' ? 'claude-3-sonnet-20240229' : (model || 'claude-3-sonnet-20240229');
+      const selectedModel = model === 'auto' ? 'Claude-Haiku-3' : (model || 'Claude-Haiku-3');
       const response = await client.messages.create({
         model: selectedModel,
         messages: this.formatMessages(messages),

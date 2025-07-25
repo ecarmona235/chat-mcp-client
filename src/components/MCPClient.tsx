@@ -3,16 +3,7 @@
 import { useMCPClient } from '../hooks/useMCPClient';
 
 export default function MCPClient() {
-  const { tools, resources, loading, error, connected, connect, callTool } = useMCPClient();
-
-  const handleTestTool = async (toolName: string) => {
-    try {
-      const result = await callTool(toolName, { random_string: "test" });
-      console.log(`Tool ${toolName} result:`, result);
-    } catch (err) {
-      console.error(`Tool ${toolName} failed:`, err);
-    }
-  };
+  const { tools, resources, loading, error, connected, connect } = useMCPClient();
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -50,12 +41,6 @@ export default function MCPClient() {
                 <div key={tool.name} className="p-4 border rounded-lg">
                   <h3 className="font-semibold text-lg">{index + 1}. {tool.name}</h3>
                   <p className="text-gray-600 mt-2">{tool.description}</p>
-                  <button
-                    onClick={() => handleTestTool(tool.name)}
-                    className="mt-2 bg-gray-500 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm"
-                  >
-                    Test Tool
-                  </button>
                   <details className="mt-2">
                     <summary className="cursor-pointer text-sm text-blue-600">
                       View Input Schema

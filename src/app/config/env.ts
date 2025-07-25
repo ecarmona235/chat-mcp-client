@@ -1,10 +1,9 @@
 import dotenv from "dotenv";
-dotenv.config();
 import { z } from "zod";
 import { Logger } from "@/app/utils/logger";
 
 const logger = new Logger("Config:Env");
-
+dotenv.config();
 // Schema for environment variables
 const envSchema = z.object({
   OPENAI_API_KEY: z.string(),

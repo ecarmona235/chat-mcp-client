@@ -33,7 +33,7 @@ export function Chat() {
           >
             <option value="">Select Provider</option>
             <option value="openai">OpenAI</option>
-            <option value="claude">Claude</option>
+            {/* <option value="claude">Claude</option> */}
             <option value="gemini">Gemini</option>
             <option value="auto">Auto</option>
           </select>
@@ -64,7 +64,7 @@ export function Chat() {
         {messages.map((message, index) => (
           <div key={index} className={`mb-4 ${message.role === 'user' ? 'text-right' : 'text-left'}`}>
             <div className={`inline-block p-3 rounded-lg max-w-xs lg:max-w-md ${
-              message.role === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-200'
+              message.role === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-900'
             }`}>
               {message.content.map((content, contentIndex) => (
                 <ContentRenderer key={contentIndex} content={content} />
