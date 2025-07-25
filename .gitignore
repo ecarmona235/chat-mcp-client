@@ -39,7 +39,3 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-src/app/api/mcp-client/call-tool/route.ts
-src/app/api/mcp-client/read-resource/route.ts
-src/app/api/mcp-tools/route.ts
-src/app/api/mcp-resources/route.ts
