@@ -3,17 +3,22 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 
 export class MCPServerManager {
   private static instance: MCPServerManager;
+  private serverUrl: string;
   
-  static getInstance() {
+  constructor(serverUrl: string = "http://localhost:3001/mcp") {
+    this.serverUrl = serverUrl;
+  }
+  
+  static getInstance(serverUrl?: string) {
     if (!this.instance) {
-      this.instance = new MCPServerManager();
+      this.instance = new MCPServerManager(serverUrl);
     }
     return this.instance;
   }
 
   async executeWithConnection<T>(operation: (client: Client) => Promise<T>): Promise<T> {
     const transport = new StreamableHTTPClientTransport(
-      new URL("http://localhost:3001/mcp")
+      new URL(this.serverUrl)
     );
     const client = new Client(
       { name: "nextjs-client", version: "1.0.0" },

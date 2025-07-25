@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { MCPServerManager } from '@/lib/mcp-server';
+import { env } from '@/app/config/env';
 
 export async function GET() {
-  const manager = MCPServerManager.getInstance();
+  const manager = MCPServerManager.getInstance(env.MCP_SERVER_URL);
   
   try {
     const resources = await manager.executeWithConnection(async (client) => {
