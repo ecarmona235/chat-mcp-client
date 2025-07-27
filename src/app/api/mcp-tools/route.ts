@@ -3,6 +3,7 @@ import { MCPServerManager } from '@/lib/mcp-server';
 import { env } from '@/app/config/env';
 
 export async function GET() {
+  console.log('MCP Server URL:', env.MCP_SERVER_URL);
   const manager = MCPServerManager.getInstance(env.MCP_SERVER_URL);
   
   try {
