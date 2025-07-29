@@ -1,11 +1,12 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { env } from "@/app/config/env";
 
 export class MCPServerManager {
   private static instance: MCPServerManager;
   private serverUrl: string;
   
-  constructor(serverUrl: string = "http://localhost:3001/mcp") {
+  constructor(serverUrl: string = env.MCP_SERVER_URL) {
     this.serverUrl = serverUrl;
   }
   
