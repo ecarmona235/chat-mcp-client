@@ -9,7 +9,7 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string(),
   ANTHROPIC_API_KEY: z.string(),
   GOOGLE_API_KEY: z.string(),
-  MCP_SERVER_URL: z.string().url().optional().default("http://localhost:3001/mcp"),
+  MCP_SERVERS: z.array(z.string()).optional().default(["http://localhost:3001/mcp"]),
 });
 
 // Function to validate environment variables
@@ -20,7 +20,7 @@ const validateEnv = () => {
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
       GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
-      MCP_SERVER_URL: process.env.MCP_SERVER_URL || "http://localhost:3001/mcp",
+      MCP_SERVERS: process.env.MCP_SERVERS || ["http://localhost:3001/mcp"],
     };
     logger.info("Environment variables");
     const parsed = envSchema.parse(env);

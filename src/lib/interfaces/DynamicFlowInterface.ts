@@ -470,28 +470,28 @@ class DynamicFlow {
     // Step 4: Get User Consent
     const consentResult = await this.consent.getConsent(
       llmSelectedTool,
-      {
-        explanation: planExplanation,
-        plan: executionPlan,
-        alternatives: executionPlan.alternatives
-      }
-    );
-    
+        {
+          explanation: planExplanation,
+          plan: executionPlan,
+          alternatives: executionPlan.alternatives
+        }
+      );
+      
     // Step 5: Handle User Response
-    if (consentResult.approved) {
-      // Execute the plan
+      if (consentResult.approved) {
+        // Execute the plan
       const result = await this.execution.executeTool(llmSelectedTool, llmExtractedParameters);
-      const rawResponse = await this.response.getToolResponse(result.executionId);
+        const rawResponse = await this.response.getToolResponse(result.executionId);
       return await this.llmFormatting.formatResponseWithLLM(rawResponse, { originalUserRequest, toolUsed: llmSelectedTool });
-      
-    } else if (consentResult.modificationRequested) {
-      // Handle modification request
-      const modifiedPlan = await this.consent.handleModificationRequest(consentResult.userFeedback);
-      return await this.executeModifiedPlan(modifiedPlan);
-      
-    } else {
-      // Handle rejection
-      return await this.consent.handleRejection(consentResult.reason);
-    }
+        
+      } else if (consentResult.modificationRequested) {
+        // Handle modification request
+        const modifiedPlan = await this.consent.handleModificationRequest(consentResult.userFeedback);
+        return await this.executeModifiedPlan(modifiedPlan);
+        
+      } else {
+        // Handle rejection
+        return await this.consent.handleRejection(consentResult.reason);
+      }
     }
   }
