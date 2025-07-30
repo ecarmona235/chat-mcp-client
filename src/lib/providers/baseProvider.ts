@@ -1,4 +1,5 @@
 import { ChatMessage, ChatProvider, ChatContent } from '@/lib/types/chat';
+import { env } from '@/app/config/env';
 
 export abstract class BaseProvider implements ChatProvider {
   abstract name: string;
@@ -7,9 +8,12 @@ export abstract class BaseProvider implements ChatProvider {
   abstract sendMessage(messages: ChatMessage[], model: string): Promise<ChatContent[]>;
   
   isAvailable(): boolean {
-    // Check if API key is available
-    const apiKey = this.getApiKey(); // TODO: update this to use config/env for validation
-    return !!apiKey;
+    try {
+      const apiKey = this.getApiKey();
+      return !!apiKey && apiKey.trim().length > 0;
+    } catch (error) {
+      return false;
+    }
   }
 
   protected abstract getApiKey(): string | null;
