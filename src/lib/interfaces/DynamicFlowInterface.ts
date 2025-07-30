@@ -6,6 +6,7 @@ import LLMFormattingInterface from './LLMFormattingInterface';
 import ControlFlowInterface from './ControlFlowInterface';
 import TransparencyInterface from './TransparencyInterface';
 import ConsentInterface from './ConsentInterface';
+import { cacheService } from '@/services/cache';
 
 class DynamicFlow {
   // Dependencies
@@ -18,33 +19,7 @@ class DynamicFlow {
   private transparency: TransparencyInterface;
   private consent: ConsentInterface;
   
-  // Local caching strategy (will be replaced with Redis when Redis is set up)
-  private toolAnalysisCache: Map<string, {
-    userExplanation: string;
-    safetyAnalysis: string;
-  }> = new Map();
-  
-  // TODO: Replace with Redis when Redis is set up
-  private toolDiscoveryCache: Map<string, any[]> = new Map();
-  private toolDiscoveryCacheTime: number = 0;
-  
-  // TODO: Replace with Redis when Redis is set up
-  private toolSelectionCache: Map<string, {tool: string | null, reasoning: string}> = new Map();
-  // TODO: Replace with Redis when Redis is set up
-  private parameterExtractionCache: Map<string, {parameters: any, confidence: number}> = new Map();
-  // TODO: Replace with Redis when Redis is set up
-  private schemaCache: Map<string, any> = new Map();
-  // TODO: Replace with Redis when Redis is set up
-  private modificationCache: Map<string, {changes: any, reasoning: string}> = new Map();
-  
-  // Cache configuration
-  private readonly CACHE_TTL = {
-    TOOL_DISCOVERY: 5 * 60 * 1000,    // 5 minutes
-    TOOL_SELECTION: 10 * 60 * 1000,   // 10 minutes
-    PARAMETER_EXTRACTION: 15 * 60 * 1000, // 15 minutes
-    SCHEMA: 60 * 60 * 1000,           // 1 hour
-    MODIFICATION: 5 * 60 * 1000       // 5 minutes
-  };
+  // Cache service is now handled by the dedicated CacheService
 
   constructor(
     discovery: DynamicDiscoveryInterface,
@@ -79,17 +54,18 @@ class DynamicFlow {
     // Create cache key from tool name and parameters
     const cacheKey = `${toolName}:${JSON.stringify(parameters)}`;
     
-    // Check if analysis is already cached
-    if (this.toolAnalysisCache.has(cacheKey)) {
-      return this.toolAnalysisCache.get(cacheKey)!;
+    // Check if analysis is already cached in Redis
+    const cachedAnalysis = await cacheService.getLLMAnalysis(cacheKey);
+    if (cachedAnalysis) {
+      return cachedAnalysis;
     }
     
     // Get analysis from LLM
     try {
       const analysis = await this.llmFormatting.analyzeToolOutcome(toolName, parameters);
       
-      // Cache the result
-      this.toolAnalysisCache.set(cacheKey, analysis);
+      // Cache the result in Redis
+      await cacheService.setLLMAnalysis(cacheKey, analysis);
       
       return analysis;
     } catch (error) {
@@ -99,47 +75,30 @@ class DynamicFlow {
         safetyAnalysis: 'Unable to analyze safety - blocking operation'
       };
       
-      // Cache the fallback result
-      this.toolAnalysisCache.set(cacheKey, fallbackAnalysis);
+      // Cache the fallback result in Redis
+      await cacheService.setLLMAnalysis(cacheKey, fallbackAnalysis);
       
       return fallbackAnalysis;
     }
-    
-    // TODO: Replace in-memory cache with Redis when Redis is set up
   }
 
-  // TODO: Replace with Redis when Redis is set up
   private async getOrCreateToolDiscovery(): Promise<any[]> {
-    const now = Date.now();
-    
-    // Check if cache is still valid
-    if (this.toolDiscoveryCache.has('tools') && 
-        (now - this.toolDiscoveryCacheTime) < this.CACHE_TTL.TOOL_DISCOVERY) {
-      return this.toolDiscoveryCache.get('tools')!;
-    }
-    
-    // Get fresh tools
-    const tools = await this.discovery.getAllTools();
-    
-    // Cache the result
-    this.toolDiscoveryCache.set('tools', tools);
-    this.toolDiscoveryCacheTime = now;
-    
-    return tools;
+    // Get fresh tools (already cached by DynamicDiscovery)
+    return await this.discovery.getAllTools();
   }
 
-  // TODO: Replace with Redis when Redis is set up
   private async getOrCreateToolSelection(userRequest: string, availableTools: any[]): Promise<{
     tool: string | null;
     reasoning: string;
   }> {
     // Create cache key from user request and tools hash
     const toolsHash = JSON.stringify(availableTools.map(t => ({name: t.name, description: t.description})));
-    const cacheKey = `${userRequest}:${toolsHash}`;
+    const cacheKey = `tool_selection:${userRequest}:${toolsHash}`;
     
-    // Check if selection is already cached
-    if (this.toolSelectionCache.has(cacheKey)) {
-      return this.toolSelectionCache.get(cacheKey)!;
+    // Check if selection is already cached in Redis
+    const cachedSelection = await cacheService.getLLMAnalysis(cacheKey);
+    if (cachedSelection) {
+      return cachedSelection;
     }
     
     // Get selection from LLM
@@ -150,8 +109,8 @@ class DynamicFlow {
         reasoning: selection.reasoning
       };
       
-      // Cache the result
-      this.toolSelectionCache.set(cacheKey, result);
+      // Cache the result in Redis
+      await cacheService.setLLMAnalysis(cacheKey, result);
       
       return result;
     } catch (error) {
@@ -160,14 +119,13 @@ class DynamicFlow {
         reasoning: 'Failed to select tool'
       };
       
-      // Cache the fallback result
-      this.toolSelectionCache.set(cacheKey, fallback);
+      // Cache the fallback result in Redis
+      await cacheService.setLLMAnalysis(cacheKey, fallback);
       
       return fallback;
     }
   }
 
-  // TODO: Replace with Redis when Redis is set up
   private async getOrCreateParameterExtraction(
     toolName: string, 
     userRequest: string, 
@@ -177,11 +135,12 @@ class DynamicFlow {
     confidence: number;
   }> {
     // Create cache key
-    const cacheKey = `${toolName}:${userRequest}:${toolReasoning}`;
+    const cacheKey = `parameter_extraction:${toolName}:${userRequest}:${toolReasoning}`;
     
-    // Check if extraction is already cached
-    if (this.parameterExtractionCache.has(cacheKey)) {
-      return this.parameterExtractionCache.get(cacheKey)!;
+    // Check if extraction is already cached in Redis
+    const cachedExtraction = await cacheService.getLLMAnalysis(cacheKey);
+    if (cachedExtraction) {
+      return cachedExtraction;
     }
     
     // Get schema (cached)
@@ -196,8 +155,8 @@ class DynamicFlow {
         toolReasoning
       );
       
-      // Cache the result
-      this.parameterExtractionCache.set(cacheKey, extraction);
+      // Cache the result in Redis
+      await cacheService.setLLMAnalysis(cacheKey, extraction);
       
       return extraction;
     } catch (error) {
@@ -206,30 +165,32 @@ class DynamicFlow {
         confidence: 0
       };
       
-      // Cache the fallback result
-      this.parameterExtractionCache.set(cacheKey, fallback);
+      // Cache the fallback result in Redis
+      await cacheService.setLLMAnalysis(cacheKey, fallback);
       
       return fallback;
     }
   }
 
-  // TODO: Replace with Redis when Redis is set up
   private async getOrCreateSchema(toolName: string): Promise<any> {
-    // Check if schema is already cached
-    if (this.schemaCache.has(toolName)) {
-      return this.schemaCache.get(toolName)!;
+    // Create cache key
+    const cacheKey = `schema:${toolName}`;
+    
+    // Check if schema is already cached in Redis
+    const cachedSchema = await cacheService.getLLMAnalysis(cacheKey);
+    if (cachedSchema) {
+      return cachedSchema;
     }
     
     // Get schema from API
     const schema = await this.schema.getToolSchema(toolName);
     
-    // Cache the result
-    this.schemaCache.set(toolName, schema);
+    // Cache the result in Redis
+    await cacheService.setLLMAnalysis(cacheKey, schema);
     
     return schema;
   }
 
-  // TODO: Replace with Redis when Redis is set up
   private async getOrCreateModificationAnalysis(
     userFeedback: string,
     originalTool: string,
@@ -239,11 +200,12 @@ class DynamicFlow {
     reasoning: string;
   }> {
     // Create cache key
-    const cacheKey = `${userFeedback}:${originalTool}:${JSON.stringify(originalParameters)}`;
+    const cacheKey = `modification:${userFeedback}:${originalTool}:${JSON.stringify(originalParameters)}`;
     
-    // Check if analysis is already cached
-    if (this.modificationCache.has(cacheKey)) {
-      return this.modificationCache.get(cacheKey)!;
+    // Check if analysis is already cached in Redis
+    const cachedAnalysis = await cacheService.getLLMAnalysis(cacheKey);
+    if (cachedAnalysis) {
+      return cachedAnalysis;
     }
     
     // Get analysis from LLM
@@ -254,8 +216,8 @@ class DynamicFlow {
         originalParameters
       );
       
-      // Cache the result
-      this.modificationCache.set(cacheKey, analysis);
+      // Cache the result in Redis
+      await cacheService.setLLMAnalysis(cacheKey, analysis);
       
       return analysis;
     } catch (error) {
@@ -264,8 +226,8 @@ class DynamicFlow {
         reasoning: 'Failed to analyze modifications'
       };
       
-      // Cache the fallback result
-      this.modificationCache.set(cacheKey, fallback);
+      // Cache the fallback result in Redis
+      await cacheService.setLLMAnalysis(cacheKey, fallback);
       
       return fallback;
     }

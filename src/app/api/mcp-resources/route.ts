@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { MCPServerManager } from '@/lib/mcp-server';
+import { MCPServerManager } from '@/services/mcp-server';
 import { env } from '@/app/config/env';
 
 export async function GET(request: Request) {

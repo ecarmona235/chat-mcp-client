@@ -10,6 +10,10 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string(),
   GOOGLE_API_KEY: z.string(),
   MCP_SERVERS: z.array(z.string()).optional().default(["http://localhost:3001/mcp"]),
+  // Cache service configuration
+  REDIS_URL: z.string().optional().default("redis://localhost:6379"),
+  CHROMA_URL: z.string().optional().default("http://localhost:8000"),
+  CHROMA_PERSIST_DIR: z.string().optional().default("./chroma_db"),
 });
 
 // Function to validate environment variables
@@ -21,6 +25,10 @@ const validateEnv = () => {
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
       GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
       MCP_SERVERS: process.env.MCP_SERVERS || ["http://localhost:3001/mcp"],
+      // Cache service configuration
+      REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",
+      CHROMA_URL: process.env.CHROMA_URL || "http://localhost:8000",
+      CHROMA_PERSIST_DIR: process.env.CHROMA_PERSIST_DIR || "./chroma_db",
     };
     logger.info("Environment variables");
     const parsed = envSchema.parse(env);

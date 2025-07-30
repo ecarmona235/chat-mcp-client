@@ -1,51 +1,42 @@
 import { env } from "@/app/config/env";
+import { cacheService } from "@/services/cache";
 
 interface DynamicDiscoveryInterface {
   getAllTools(): Promise<any[]>;
   findToolsByCategory(category: string): Promise<any[]>;
   findToolsByCapability(capability: string): Promise<any[]>;
+  getToolSummaries(): Promise<{name: string, description: string}[]>;
+  validateToolSchema(tool: any): boolean;
+  refreshToolSchema(toolName: string, server: string): Promise<void>;
 }
 
 class DynamicDiscovery implements DynamicDiscoveryInterface {
-  // TODO: Replace with Redis when Redis is set up
-  private toolCache: Map<string, any[]> = new Map();
-  private cacheTimestamp: number = 0;
-  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
   constructor() {
-    // Initialize cache
-    this.toolCache = new Map();
-    this.cacheTimestamp = 0;
+    // Cache service is now handled by the dedicated CacheService
   }
 
   async getAllTools(): Promise<any[]> {
-    const now = Date.now();
-    
-    // Check if cache is still valid
-    if (this.toolCache.has('all_tools') && 
-        (now - this.cacheTimestamp) < this.CACHE_TTL) {
-      return this.toolCache.get('all_tools')!;
-    }
-
     try {
-      // Fetch tools from MCP server
-      const tools = await this.fetchToolsFromMCPServer();
+      // Try to get cached tools from all servers
+      const allTools: any[] = [];
       
-      // Cache the result
-      this.toolCache.set('all_tools', tools);
-      this.cacheTimestamp = now;
-      
-      return tools;
-    } catch (error) {
-      console.error('Failed to fetch tools from MCP server:', error);
-      
-      // Return cached data if available, even if expired
-      if (this.toolCache.has('all_tools')) {
-        console.warn('Returning cached tools due to MCP server error');
-        return this.toolCache.get('all_tools')!;
+      for (const server of env.MCP_SERVERS) {
+        const cachedTools = await cacheService.getToolDiscovery(server);
+        if (cachedTools) {
+          allTools.push(...cachedTools);
+        }
       }
       
-      // Return empty array if no cache and server is down
+      // If we have cached tools, return them
+      if (allTools.length > 0) {
+        return allTools;
+      }
+      
+      // Otherwise, fetch fresh tools
+      const tools = await this.fetchToolsFromMCPServer();
+      return tools;
+    } catch (error) {
+      console.error('Failed to get tools:', error);
       return [];
     }
   }
@@ -82,6 +73,14 @@ class DynamicDiscovery implements DynamicDiscoveryInterface {
   }
 
   async findToolsByCapability(capability: string): Promise<any[]> {
+    // First try semantic search using Chroma
+    const semanticResults = await cacheService.findSimilarTools(capability, 10);
+    
+    if (semanticResults.length > 0) {
+      return semanticResults;
+    }
+    
+    // Fallback to traditional search if semantic search fails
     const allTools = await this.getAllTools();
     const searchTerm = capability.toLowerCase();
     
@@ -120,7 +119,6 @@ class DynamicDiscovery implements DynamicDiscoveryInterface {
 
   private async fetchToolsFromMCPServer(): Promise<any[]> {
     try {
-      // TODO: Replace with actual MCP server endpoints
       const mcpServers: Array<string> = env.MCP_SERVERS;
       const allTools: any[] = [];
 
@@ -139,7 +137,18 @@ class DynamicDiscovery implements DynamicDiscoveryInterface {
             
             // Handle the new API response format
             if (data.success && data.tools) {
-              allTools.push(...data.tools);
+              // Normalize tools with server info
+              const normalizedTools = this.normalizeToolData(data.tools, server);
+              allTools.push(...normalizedTools);
+              
+              // Cache the tools for this server
+              await cacheService.setToolDiscovery(server, normalizedTools);
+              
+              // Store tool embeddings for semantic search
+              for (const tool of normalizedTools) {
+                await cacheService.storeToolEmbedding(tool);
+              }
+              
               console.log(`Successfully fetched ${data.count || data.tools.length} tools from MCP server: ${server}`);
             } else {
               console.warn(`MCP server ${server} returned invalid response format`);
@@ -157,8 +166,7 @@ class DynamicDiscovery implements DynamicDiscoveryInterface {
         throw new Error('No tools found from any MCP server');
       }
 
-      // Validate and normalize tool data
-      return this.normalizeToolData(allTools);
+      return allTools;
       
     } catch (error) {
       console.error('Error fetching tools from MCP servers:', error);
@@ -166,13 +174,14 @@ class DynamicDiscovery implements DynamicDiscoveryInterface {
     }
   }
 
-  private normalizeToolData(tools: any[]): any[] {
+  private normalizeToolData(tools: any[], server: string): any[] {
     return tools.map(tool => ({
       name: tool.name || 'unknown_tool',
       description: tool.description || 'No description available',
       category: tool.category || 'general',
       capabilities: tool.capabilities || [],
       schema: tool.schema || {},
+      server: server, // Add server info
       // Minimal summary for LLM (only name and description)
       summary: {
         name: tool.name || 'unknown_tool',
@@ -181,16 +190,110 @@ class DynamicDiscovery implements DynamicDiscoveryInterface {
     }));
   }
 
-  // TODO: Replace with Redis when Redis is set up
-  private clearCache(): void {
-    this.toolCache.clear();
-    this.cacheTimestamp = 0;
+  // Clear cache for all servers
+  private async clearCache(): Promise<void> {
+    for (const server of env.MCP_SERVERS) {
+      await cacheService.clearServerCache(server);
+    }
   }
 
   // Method to manually refresh cache (useful for testing)
   async refreshCache(): Promise<void> {
-    this.clearCache();
+    await this.clearCache();
     await this.getAllTools();
+  }
+
+  // Validate tool schema structure
+  validateToolSchema(tool: any): boolean {
+    try {
+      // Check required fields
+      if (!tool.name || !tool.description) {
+        console.warn(`Tool missing required fields: ${tool.name || 'unknown'}`);
+        return false;
+      }
+
+      // Check if schema exists
+      if (!tool.schema) {
+        console.warn(`Tool ${tool.name} missing schema`);
+        return false;
+      }
+
+      // Validate JSON Schema structure
+      if (tool.schema.inputSchema) {
+        const inputSchema = tool.schema.inputSchema;
+        
+        // Check if it's a valid object
+        if (typeof inputSchema !== 'object' || inputSchema === null) {
+          console.warn(`Tool ${tool.name} has invalid inputSchema type`);
+          return false;
+        }
+
+        // Check if properties exist and is an object
+        if (inputSchema.properties && typeof inputSchema.properties !== 'object') {
+          console.warn(`Tool ${tool.name} has invalid properties in inputSchema`);
+          return false;
+        }
+
+        // Check if required array is valid (if it exists)
+        if (inputSchema.required && !Array.isArray(inputSchema.required)) {
+          console.warn(`Tool ${tool.name} has invalid required array in inputSchema`);
+          return false;
+        }
+
+        // Validate that required fields exist in properties
+        if (inputSchema.required && inputSchema.properties) {
+          for (const requiredField of inputSchema.required) {
+            if (!inputSchema.properties[requiredField]) {
+              console.warn(`Tool ${tool.name} has required field '${requiredField}' that doesn't exist in properties`);
+              return false;
+            }
+          }
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error(`Error validating schema for tool ${tool.name}:`, error);
+      return false;
+    }
+  }
+
+  // Refresh tool schema from specific server
+  async refreshToolSchema(toolName: string, server: string): Promise<void> {
+    try {
+      // Clear cache for this specific server
+      await cacheService.clearServerCache(server);
+      
+      // Fetch fresh tools from server
+      const response = await fetch(`/api/mcp-tools?server=${server}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.tools) {
+          const tool = data.tools.find((t: any) => t.name === toolName);
+          if (tool) {
+            // Normalize and cache the updated tool
+            const normalizedTool = this.normalizeToolData([tool], server)[0];
+            
+            // Update Redis cache
+            await cacheService.setToolSchema(toolName, server, normalizedTool.schema);
+            
+            // Update Chroma embedding
+            await cacheService.storeToolEmbedding(normalizedTool);
+            
+            console.log(`Refreshed schema for tool ${toolName} from server ${server}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to refresh schema for tool ${toolName} from server ${server}:`, error);
+      throw error;
+    }
   }
 }
 

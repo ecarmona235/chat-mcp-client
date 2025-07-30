@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ProviderFactory } from '@/lib/providers/providerFactory';
+import { ProviderFactory } from '@/services/providers/providerFactory';
 import { ChatMessage } from '@/lib/types/chat';
 
 export async function POST(request: NextRequest) {
