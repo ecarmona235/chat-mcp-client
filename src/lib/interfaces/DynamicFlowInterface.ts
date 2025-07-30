@@ -1,5 +1,4 @@
 import DynamicDiscoveryInterface from './DynamicDiscoveryInterface';
-import DynamicSchemaInterface from './DynamicSchemaInterface';
 import DynamicExecutionInterface from './DynamicExecutionInterface';
 import DynamicResponseInterface from './DynamicResponseInterface';
 import LLMFormattingInterface from './LLMFormattingInterface';
@@ -11,7 +10,6 @@ import { cacheService } from '@/services/cache';
 class DynamicFlow {
   // Dependencies
   private discovery: DynamicDiscoveryInterface;
-  private schema: DynamicSchemaInterface;
   private execution: DynamicExecutionInterface;
   private response: DynamicResponseInterface;
   private llmFormatting: LLMFormattingInterface;
@@ -23,7 +21,6 @@ class DynamicFlow {
 
   constructor(
     discovery: DynamicDiscoveryInterface,
-    schema: DynamicSchemaInterface,
     execution: DynamicExecutionInterface,
     response: DynamicResponseInterface,
     llmFormatting: LLMFormattingInterface,
@@ -32,7 +29,6 @@ class DynamicFlow {
     consent: ConsentInterface
   ) {
     this.discovery = discovery;
-    this.schema = schema;
     this.execution = execution;
     this.response = response;
     this.llmFormatting = llmFormatting;
@@ -173,22 +169,15 @@ class DynamicFlow {
   }
 
   private async getOrCreateSchema(toolName: string): Promise<any> {
-    // Create cache key
-    const cacheKey = `schema:${toolName}`;
+    // Get all tools and find the schema for the specific tool
+    const allTools = await this.discovery.getAllTools();
+    const tool = allTools.find(t => t.name === toolName);
     
-    // Check if schema is already cached in Redis
-    const cachedSchema = await cacheService.getLLMAnalysis(cacheKey);
-    if (cachedSchema) {
-      return cachedSchema;
+    if (!tool) {
+      throw new Error(`Tool ${toolName} not found`);
     }
     
-    // Get schema from API
-    const schema = await this.schema.getToolSchema(toolName);
-    
-    // Cache the result in Redis
-    await cacheService.setLLMAnalysis(cacheKey, schema);
-    
-    return schema;
+    return tool.schema;
   }
 
   private async getOrCreateModificationAnalysis(
