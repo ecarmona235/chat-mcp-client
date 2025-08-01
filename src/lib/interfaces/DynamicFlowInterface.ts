@@ -1,6 +1,5 @@
 import DynamicDiscoveryInterface from './DynamicDiscoveryInterface';
 import DynamicExecutionInterface from './DynamicExecutionInterface';
-import DynamicResponseInterface from './DynamicResponseInterface';
 import LLMFormattingInterface from './LLMFormattingInterface';
 import ControlFlowInterface from './ControlFlowInterface';
 import TransparencyInterface from './TransparencyInterface';
@@ -11,7 +10,6 @@ class DynamicFlow {
   // Dependencies
   private discovery: DynamicDiscoveryInterface;
   private execution: DynamicExecutionInterface;
-  private response: DynamicResponseInterface;
   private llmFormatting: LLMFormattingInterface;
   private controlFlow: ControlFlowInterface;
   private transparency: TransparencyInterface;
@@ -22,7 +20,6 @@ class DynamicFlow {
   constructor(
     discovery: DynamicDiscoveryInterface,
     execution: DynamicExecutionInterface,
-    response: DynamicResponseInterface,
     llmFormatting: LLMFormattingInterface,
     controlFlow: ControlFlowInterface,
     transparency: TransparencyInterface,
@@ -30,7 +27,6 @@ class DynamicFlow {
   ) {
     this.discovery = discovery;
     this.execution = execution;
-    this.response = response;
     this.llmFormatting = llmFormatting;
     this.controlFlow = controlFlow;
     this.transparency = transparency;
@@ -418,8 +414,7 @@ class DynamicFlow {
       if (consentResult.approved) {
         // User approved - proceed with execution
         const result = await this.execution.executeTool(llmSelectedTool, llmExtractedParameters);
-        const rawResponse = await this.response.getToolResponse(result.executionId);
-        return await this.llmFormatting.formatResponseWithLLM(rawResponse, { originalUserRequest, toolUsed: llmSelectedTool });
+        return await this.llmFormatting.formatResponseWithLLM(result.result, { originalUserRequest, toolUsed: llmSelectedTool });
       } else if (consentResult.modificationRequested) {
         // User wants modifications
         const modifiedPlan = await this.consent.handleModificationRequest(consentResult.userFeedback);
@@ -431,8 +426,7 @@ class DynamicFlow {
     } else {
       // Low risk operation - proceed directly without consent
       const result = await this.execution.executeTool(llmSelectedTool, llmExtractedParameters);
-      const rawResponse = await this.response.getToolResponse(result.executionId);
-      return await this.llmFormatting.formatResponseWithLLM(rawResponse, { originalUserRequest, toolUsed: llmSelectedTool });
+      return await this.llmFormatting.formatResponseWithLLM(result.result, { originalUserRequest, toolUsed: llmSelectedTool });
     }
   }
   }
