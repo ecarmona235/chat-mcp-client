@@ -256,6 +256,7 @@ class DynamicFlow {
     
     if (analysis.safetyAnalysis.toLowerCase().includes('system')) {
       risks.push('This operation may affect system settings');
+      shouldBlock = true; // Block system settings changes
     }
     
     return {
@@ -392,57 +393,46 @@ class DynamicFlow {
     const expectedOutcome = await this.predictOutcome(llmSelectedTool, llmExtractedParameters);
     const riskAssessment = await this.assessRisks(llmSelectedTool, llmExtractedParameters);
     
-    // Check if operation should be blocked
+    // Step 2: Handle Consent Based on Risk Level
     if (riskAssessment.shouldBlock) {
-      const blockReason = riskAssessment.risks.join(', ');
-      await this.controlFlow.stopAllProcessing(`Operation blocked due to safety concerns: ${blockReason}`);
-      return `❌ Operation blocked for safety reasons:\n${riskAssessment.risks.join('\n')}\n\nPlease contact an administrator if this operation is necessary.`;
-    }
-    
-    const executionPlan = {
-      tool: llmSelectedTool,
-      parameters: llmExtractedParameters,
-      expectedOutcome: expectedOutcome,
-      risks: riskAssessment.risks,
-      alternatives: []
-    };
-    
-    // Step 3: Show Plan to User
-    const planExplanation = await this.transparency.explainAction(
-      `I'm about to execute ${llmSelectedTool}`,
-      {
-        tool: llmSelectedTool,
-        parameters: llmExtractedParameters,
-        whatItWillDo: expectedOutcome, // Use the already computed outcome
-        whyThisTool: `Selected by LLM based on your request: "${originalUserRequest}"`
-      }
-    );
-    
-    // Step 4: Get User Consent
-    const consentResult = await this.consent.getConsent(
-      llmSelectedTool,
+      // High risk operation - require consent
+      const consentExplanation = this.consent.explainConsentRequest(
+        expectedOutcome,
+        riskAssessment.risks
+      );
+      
+      const consentResult = await this.consent.getConsent(
+        llmSelectedTool,
         {
-          explanation: planExplanation,
-          plan: executionPlan,
-          alternatives: executionPlan.alternatives
+          explanation: consentExplanation,
+          plan: {
+            tool: llmSelectedTool,
+            parameters: llmExtractedParameters,
+            expectedOutcome: expectedOutcome,
+            risks: riskAssessment.risks
+          }
         }
       );
       
-    // Step 5: Handle User Response
+      // Handle consent response
       if (consentResult.approved) {
-        // Execute the plan
-      const result = await this.execution.executeTool(llmSelectedTool, llmExtractedParameters);
+        // User approved - proceed with execution
+        const result = await this.execution.executeTool(llmSelectedTool, llmExtractedParameters);
         const rawResponse = await this.response.getToolResponse(result.executionId);
-      return await this.llmFormatting.formatResponseWithLLM(rawResponse, { originalUserRequest, toolUsed: llmSelectedTool });
-        
+        return await this.llmFormatting.formatResponseWithLLM(rawResponse, { originalUserRequest, toolUsed: llmSelectedTool });
       } else if (consentResult.modificationRequested) {
-        // Handle modification request
+        // User wants modifications
         const modifiedPlan = await this.consent.handleModificationRequest(consentResult.userFeedback);
         return await this.executeModifiedPlan(modifiedPlan);
-        
       } else {
-        // Handle rejection
+        // User rejected
         return await this.consent.handleRejection(consentResult.reason);
       }
+    } else {
+      // Low risk operation - proceed directly without consent
+      const result = await this.execution.executeTool(llmSelectedTool, llmExtractedParameters);
+      const rawResponse = await this.response.getToolResponse(result.executionId);
+      return await this.llmFormatting.formatResponseWithLLM(rawResponse, { originalUserRequest, toolUsed: llmSelectedTool });
     }
+  }
   }
