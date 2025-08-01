@@ -1,7 +1,7 @@
 import { ChatProvider } from '@/lib/types/chat';
-import { OpenAIProvider } from '@/services/providers/openaiProvider';
-import { ClaudeProvider } from '@/services/providers/claudeProvider';
-import { GeminiProvider } from '@/services/providers/geminiProvider';
+import { OpenAIProvider } from '@/services/openaiProvider';
+import { ClaudeProvider } from '@/services/claudeProvider';
+import { GeminiProvider } from '@/services/geminiProvider';
 
 export class ProviderFactory {
   private static providers: Map<string, ChatProvider> = new Map();

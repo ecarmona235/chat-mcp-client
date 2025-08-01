@@ -1,7 +1,6 @@
 import DynamicDiscoveryInterface from './DynamicDiscoveryInterface';
 import DynamicExecutionInterface from './DynamicExecutionInterface';
 import LLMFormattingInterface from './LLMFormattingInterface';
-import ControlFlowInterface from './ControlFlowInterface';
 import TransparencyInterface from './TransparencyInterface';
 import ConsentInterface from './ConsentInterface';
 import { cacheService } from '@/services/cache';
@@ -11,9 +10,14 @@ class DynamicFlow {
   private discovery: DynamicDiscoveryInterface;
   private execution: DynamicExecutionInterface;
   private llmFormatting: LLMFormattingInterface;
-  private controlFlow: ControlFlowInterface;
   private transparency: TransparencyInterface;
   private consent: ConsentInterface;
+  
+  // Execution tracking
+  private currentExecutionId: string | null = null;
+  
+  // TODO: Support multiple parallel executions
+  // private activeExecutionIds: Set<string> = new Set();
   
   // Cache service is now handled by the dedicated CacheService
 
@@ -21,14 +25,12 @@ class DynamicFlow {
     discovery: DynamicDiscoveryInterface,
     execution: DynamicExecutionInterface,
     llmFormatting: LLMFormattingInterface,
-    controlFlow: ControlFlowInterface,
     transparency: TransparencyInterface,
     consent: ConsentInterface
   ) {
     this.discovery = discovery;
     this.execution = execution;
     this.llmFormatting = llmFormatting;
-    this.controlFlow = controlFlow;
     this.transparency = transparency;
     this.consent = consent;
   }
@@ -343,7 +345,11 @@ class DynamicFlow {
   async processUserRequest(originalUserRequest: string): Promise<string> {
     // Check for stop commands from the original human user
     if (this.isStopCommand(originalUserRequest)) {
-      await this.controlFlow.stopAllProcessing("User requested stop");
+      // Cancel current execution if one is running
+      if (this.currentExecutionId) {
+        await this.execution.cancelExecution(this.currentExecutionId);
+        this.currentExecutionId = null;
+      }
       return "Stopped processing. How can I help you?";
     }
 
@@ -381,7 +387,11 @@ class DynamicFlow {
   ): Promise<string> {
     // Check for stop commands from the original human user
     if (this.isStopCommand(originalUserRequest)) {
-      await this.controlFlow.stopAllProcessing("User requested stop");
+      // Cancel current execution if one is running
+      if (this.currentExecutionId) {
+        await this.execution.cancelExecution(this.currentExecutionId);
+        this.currentExecutionId = null;
+      }
       return "Stopped processing. How can I help you?";
     }
     
@@ -414,7 +424,10 @@ class DynamicFlow {
       if (consentResult.approved) {
         // User approved - proceed with execution
         const result = await this.execution.executeTool(llmSelectedTool, llmExtractedParameters);
-        return await this.llmFormatting.formatResponseWithLLM(result.result, { originalUserRequest, toolUsed: llmSelectedTool });
+        this.currentExecutionId = result.executionId;
+        const response = await this.llmFormatting.formatResponseWithLLM(result.result, { originalUserRequest, toolUsed: llmSelectedTool });
+        this.currentExecutionId = null; // Clear after completion
+        return response;
       } else if (consentResult.modificationRequested) {
         // User wants modifications
         const modifiedPlan = await this.consent.handleModificationRequest(consentResult.userFeedback);
@@ -426,7 +439,10 @@ class DynamicFlow {
     } else {
       // Low risk operation - proceed directly without consent
       const result = await this.execution.executeTool(llmSelectedTool, llmExtractedParameters);
-      return await this.llmFormatting.formatResponseWithLLM(result.result, { originalUserRequest, toolUsed: llmSelectedTool });
+      this.currentExecutionId = result.executionId;
+      const response = await this.llmFormatting.formatResponseWithLLM(result.result, { originalUserRequest, toolUsed: llmSelectedTool });
+      this.currentExecutionId = null; // Clear after completion
+      return response;
     }
   }
   }
