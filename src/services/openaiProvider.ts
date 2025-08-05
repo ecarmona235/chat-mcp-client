@@ -33,7 +33,7 @@ export class OpenAIProvider extends BaseProvider {
   private async getMCPClient(): Promise<Client> {
     if (!this.mcpClient) {
       this.mcpTransport = new StreamableHTTPClientTransport(
-        new URL(env.MCP_SERVER_URL)
+        new URL(env.MCP_SERVERS[0])
       );
       
       this.mcpClient = new Client(

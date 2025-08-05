@@ -69,6 +69,7 @@ class Consent implements ConsentInterface {
     
     explanation += `**Your Options:**\n`;
     explanation += `• **Allow**: Proceed with the operation\n`;
+    explanation += `• **Modify**: Modify the operation\n`;
     explanation += `• **Deny**: Cancel the operation\n\n`;
     explanation += `Please review the risks carefully before proceeding.`;
     

@@ -41,188 +41,13 @@ class DynamicFlow {
     return stopCommands.some(cmd => userRequest.toLowerCase().includes(cmd));
   }
 
-  private async getOrCreateToolAnalysis(toolName: string, parameters: any): Promise<{
-    userExplanation: string;
-    safetyAnalysis: string;
-  }> {
-    // Create cache key from tool name and parameters
-    const cacheKey = `${toolName}:${JSON.stringify(parameters)}`;
-    
-    // Check if analysis is already cached in Redis
-    const cachedAnalysis = await cacheService.getLLMAnalysis(cacheKey);
-    if (cachedAnalysis) {
-      return cachedAnalysis;
-    }
-    
-    // Get analysis from LLM
-    try {
-      const analysis = await this.llmFormatting.analyzeToolOutcome(toolName, parameters);
-      
-      // Cache the result in Redis
-      await cacheService.setLLMAnalysis(cacheKey, analysis);
-      
-      return analysis;
-    } catch (error) {
-      // Fallback if LLM analysis fails
-      const fallbackAnalysis = {
-        userExplanation: `Expected to execute ${toolName} with provided parameters`,
-        safetyAnalysis: 'Unable to analyze safety - blocking operation'
-      };
-      
-      // Cache the fallback result in Redis
-      await cacheService.setLLMAnalysis(cacheKey, fallbackAnalysis);
-      
-      return fallbackAnalysis;
-    }
-  }
 
-  private async getOrCreateToolDiscovery(): Promise<any[]> {
-    // Get fresh tools (already cached by DynamicDiscovery)
-    return await this.discovery.getAllTools();
-  }
 
-  private async getOrCreateToolSelection(userRequest: string, availableTools: any[]): Promise<{
-    tool: string | null;
-    reasoning: string;
-  }> {
-    // Create cache key from user request and tools hash
-    const toolsHash = JSON.stringify(availableTools.map(t => ({name: t.name, description: t.description})));
-    const cacheKey = `tool_selection:${userRequest}:${toolsHash}`;
-    
-    // Check if selection is already cached in Redis
-    const cachedSelection = await cacheService.getLLMAnalysis(cacheKey);
-    if (cachedSelection) {
-      return cachedSelection;
-    }
-    
-    // Get selection from LLM
-    try {
-      const selection = await this.llmFormatting.selectTool(userRequest, availableTools);
-      const result = {
-        tool: selection.selectedTool,
-        reasoning: selection.reasoning
-      };
-      
-      // Cache the result in Redis
-      await cacheService.setLLMAnalysis(cacheKey, result);
-      
-      return result;
-    } catch (error) {
-      const fallback = {
-        tool: null,
-        reasoning: 'Failed to select tool'
-      };
-      
-      // Cache the fallback result in Redis
-      await cacheService.setLLMAnalysis(cacheKey, fallback);
-      
-      return fallback;
-    }
-  }
 
-  private async getOrCreateParameterExtraction(
-    toolName: string, 
-    userRequest: string, 
-    toolReasoning: string
-  ): Promise<{
-    parameters: any;
-    confidence: number;
-  }> {
-    // Create cache key
-    const cacheKey = `parameter_extraction:${toolName}:${userRequest}:${toolReasoning}`;
-    
-    // Check if extraction is already cached in Redis
-    const cachedExtraction = await cacheService.getLLMAnalysis(cacheKey);
-    if (cachedExtraction) {
-      return cachedExtraction;
-    }
-    
-    // Get schema (cached)
-    const toolSchema = await this.getOrCreateSchema(toolName);
-    
-    // Get extraction from LLM
-    try {
-      const extraction = await this.llmFormatting.extractParameters(
-        toolName,
-        toolSchema,
-        userRequest,
-        toolReasoning
-      );
-      
-      // Cache the result in Redis
-      await cacheService.setLLMAnalysis(cacheKey, extraction);
-      
-      return extraction;
-    } catch (error) {
-      const fallback = {
-        parameters: {},
-        confidence: 0
-      };
-      
-      // Cache the fallback result in Redis
-      await cacheService.setLLMAnalysis(cacheKey, fallback);
-      
-      return fallback;
-    }
-  }
-
-  private async getOrCreateSchema(toolName: string): Promise<any> {
-    // Get all tools and find the schema for the specific tool
-    const allTools = await this.discovery.getAllTools();
-    const tool = allTools.find(t => t.name === toolName);
-    
-    if (!tool) {
-      throw new Error(`Tool ${toolName} not found`);
-    }
-    
-    return tool.schema;
-  }
-
-  private async getOrCreateModificationAnalysis(
-    userFeedback: string,
-    originalTool: string,
-    originalParameters: any
-  ): Promise<{
-    changes: any;
-    reasoning: string;
-  }> {
-    // Create cache key
-    const cacheKey = `modification:${userFeedback}:${originalTool}:${JSON.stringify(originalParameters)}`;
-    
-    // Check if analysis is already cached in Redis
-    const cachedAnalysis = await cacheService.getLLMAnalysis(cacheKey);
-    if (cachedAnalysis) {
-      return cachedAnalysis;
-    }
-    
-    // Get analysis from LLM
-    try {
-      const analysis = await this.llmFormatting.analyzeModifications(
-        userFeedback,
-        originalTool,
-        originalParameters
-      );
-      
-      // Cache the result in Redis
-      await cacheService.setLLMAnalysis(cacheKey, analysis);
-      
-      return analysis;
-    } catch (error) {
-      const fallback = {
-        changes: {},
-        reasoning: 'Failed to analyze modifications'
-      };
-      
-      // Cache the fallback result in Redis
-      await cacheService.setLLMAnalysis(cacheKey, fallback);
-      
-      return fallback;
-    }
-  }
 
   private async predictOutcome(toolName: string, parameters: any): Promise<string> {
     try {
-      const analysis = await this.getOrCreateToolAnalysis(toolName, parameters);
+      const analysis = await this.llmFormatting.analyzeToolOutcome(toolName, parameters);
       return analysis.userExplanation;
     } catch (error) {
       // Fallback if analysis fails
@@ -231,44 +56,49 @@ class DynamicFlow {
   }
 
   private async assessRisks(toolName: string, parameters: any): Promise<{risks: string[], shouldBlock: boolean}> {
-    const analysis = await this.getOrCreateToolAnalysis(toolName, parameters);
-    
-    const risks = [];
-    let shouldBlock = false;
-    
-    if (analysis.safetyAnalysis.toLowerCase().includes('write') || 
-        analysis.safetyAnalysis.toLowerCase().includes('modify')) {
-      risks.push('This operation may modify your data');
-      shouldBlock = true; // Block write/modify operations
+    try {
+      const analysis = await this.llmFormatting.analyzeToolOutcome(toolName, parameters);
+      
+      const risks = [];
+      let shouldBlock = false;
+      
+      if (analysis.safetyAnalysis.toLowerCase().includes('write') || 
+          analysis.safetyAnalysis.toLowerCase().includes('modify')) {
+        risks.push('This operation may modify your data');
+        shouldBlock = true; // Block write/modify operations
+      }
+      
+      if (analysis.safetyAnalysis.toLowerCase().includes('delete')) {
+        risks.push('This operation may delete data');
+        shouldBlock = true; // Block delete operations
+      }
+      
+      if (analysis.safetyAnalysis.toLowerCase().includes('sensitive')) {
+        risks.push('This operation may access sensitive information');
+        shouldBlock = true; // Block sensitive data access
+      }
+      
+      if (analysis.safetyAnalysis.toLowerCase().includes('system')) {
+        risks.push('This operation may affect system settings');
+        shouldBlock = true; // Block system settings changes
+      }
+      
+      return {
+        risks: risks.length > 0 ? risks : ['Low risk operation'],
+        shouldBlock
+      };
+    } catch (error) {
+      // Default to blocking if analysis fails
+      return { risks: ['Unable to assess safety'], shouldBlock: true };
     }
-    
-    if (analysis.safetyAnalysis.toLowerCase().includes('delete')) {
-      risks.push('This operation may delete data');
-      shouldBlock = true; // Block delete operations
-    }
-    
-    if (analysis.safetyAnalysis.toLowerCase().includes('sensitive')) {
-      risks.push('This operation may access sensitive information');
-      shouldBlock = true; // Block sensitive data access
-    }
-    
-    if (analysis.safetyAnalysis.toLowerCase().includes('system')) {
-      risks.push('This operation may affect system settings');
-      shouldBlock = true; // Block system settings changes
-    }
-    
-    return {
-      risks: risks.length > 0 ? risks : ['Low risk operation'],
-      shouldBlock
-    };
   }
 
 
 
   private async executeModifiedPlan(modifiedPlan: any): Promise<string> {
     try {
-      // 1. Analyze user feedback to understand what they want changed (cached)
-      const modificationAnalysis = await this.getOrCreateModificationAnalysis(
+      // 1. Analyze user feedback to understand what they want changed
+      const modificationAnalysis = await this.llmFormatting.analyzeModifications(
         modifiedPlan.userFeedback,
         modifiedPlan.originalTool,
         modifiedPlan.originalParameters
@@ -353,27 +183,23 @@ class DynamicFlow {
       return "Stopped processing. How can I help you?";
     }
 
-    // Step 1: Discover available tools (cached)
-    const availableTools = await this.getOrCreateToolDiscovery();
+    // Step 1: Discover relevant tools using semantic search
+    const availableTools = await this.discovery.findToolsByCapability(originalUserRequest);
     
-    // Step 2: Select best tool using LLM (cached)
-    const toolSelection = await this.getOrCreateToolSelection(originalUserRequest, availableTools);
+    // Step 2: Select best tool using LLM
+    const toolSelection = await this.llmFormatting.selectTool(originalUserRequest, availableTools);
     
-    if (!toolSelection.tool) {
+    if (!toolSelection.selectedTool) {
       return "I couldn't find a suitable tool for your request. Please try rephrasing your request.";
     }
 
-    // Step 3: Extract parameters using LLM (cached)
-    const parameterExtraction = await this.getOrCreateParameterExtraction(
-      toolSelection.tool, 
-      originalUserRequest, 
-      toolSelection.reasoning
-    );
+    // Note: Parameter extraction is handled by the LLM that calls this method
+    // The parameters are passed in as llmExtractedParameters
 
     // Step 4: Execute the dynamic flow with selected tool and parameters
     return await this.executeDynamicFlow(
-      toolSelection.tool,
-      parameterExtraction.parameters,
+      toolSelection.selectedTool,
+      {}, // Parameters will be extracted by the calling LLM
       originalUserRequest
     );
   }
