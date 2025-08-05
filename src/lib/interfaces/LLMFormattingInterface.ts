@@ -5,19 +5,20 @@ import { Logger } from '@/app/utils/logger';
 const logger = new Logger("LLMFormatting");
 
 interface LLMFormattingInterface {
-  formatResponseWithLLM(rawResponse: any, context: any): Promise<string>;
-  analyzeToolOutcome(toolName: string, parameters: any): Promise<{
+  formatResponseWithLLM(rawResponse: any, context: any, model?: string): Promise<string>;
+  analyzeToolOutcome(toolName: string, parameters: any, model?: string): Promise<{
     userExplanation: string;
     safetyAnalysis: string;
   }>;
-  selectTool(userRequest: string, availableTools: any[]): Promise<{
+  selectTool(userRequest: string, availableTools: any[], model?: string): Promise<{
     selectedTool: string | null;
     reasoning: string;
   }>;
   analyzeModifications(
     userFeedback: string,
     originalTool: string,
-    originalParameters: any
+    originalParameters: any,
+    model?: string
   ): Promise<{
     changes: any;
     reasoning: string;
@@ -44,7 +45,7 @@ class LLMFormatting implements LLMFormattingInterface {
     return `${operation}:${argsString}`;
   }
 
-  private async callLLM(prompt: string): Promise<string> {
+  private async callLLM(prompt: string, model?: string): Promise<string> {
     try {
       const provider = ProviderFactory.getProvider(this.defaultProvider);
       if (!provider) {
@@ -64,7 +65,8 @@ class LLMFormatting implements LLMFormattingInterface {
         }
       ];
 
-      const response = await provider.sendMessage(messages, this.defaultModel);
+      const selectedModel = model || this.defaultModel;
+      const response = await provider.sendMessage(messages, selectedModel);
       return typeof response[0]?.content === 'string' ? response[0].content : 'No response from LLM';
     } catch (error) {
       logger.error('LLM call failed:', error);
@@ -72,7 +74,7 @@ class LLMFormatting implements LLMFormattingInterface {
     }
   }
 
-  async formatResponseWithLLM(rawResponse: any, context: any): Promise<string> {
+  async formatResponseWithLLM(rawResponse: any, context: any, model?: string): Promise<string> {
     const cacheKey = this.generateCacheKey('format_response', JSON.stringify(rawResponse), JSON.stringify(context));
     
     // Check cache first
@@ -93,7 +95,7 @@ class LLMFormatting implements LLMFormattingInterface {
           Please format this response to be user-friendly and informative. Focus on what the user wanted to know and present the information clearly.
           `;
 
-    const formattedResponse = await this.callLLM(prompt);
+    const formattedResponse = await this.callLLM(prompt, model);
     
     // Cache the result
     await this.setCachedLLMResponse(cacheKey, formattedResponse);
@@ -103,7 +105,7 @@ class LLMFormatting implements LLMFormattingInterface {
 
 
 
-  async analyzeToolOutcome(toolName: string, parameters: any): Promise<{
+  async analyzeToolOutcome(toolName: string, parameters: any, model?: string): Promise<{
     userExplanation: string;
     safetyAnalysis: string;
   }> {
@@ -135,7 +137,7 @@ class LLMFormatting implements LLMFormattingInterface {
         SAFETY ANALYSIS: [safety assessment]
         `;
 
-    const analysis = await this.callLLM(prompt);
+    const analysis = await this.callLLM(prompt, model);
     
     // Parse the response
     const userExplanationMatch = analysis.match(/USER EXPLANATION:\s*([\s\S]*?)(?=\nSAFETY ANALYSIS:|$)/);
@@ -151,7 +153,7 @@ class LLMFormatting implements LLMFormattingInterface {
     return result;
   }
 
-  async selectTool(userRequest: string, availableTools: any[]): Promise<{
+  async selectTool(userRequest: string, availableTools: any[], model?: string): Promise<{
     selectedTool: string | null;
     reasoning: string;
   }> {
@@ -181,7 +183,7 @@ class LLMFormatting implements LLMFormattingInterface {
         REASONING: [explanation of why this tool was chosen]
         `;
 
-    const selection = await this.callLLM(prompt);
+    const selection = await this.callLLM(prompt, model);
     
     const selectedToolMatch = selection.match(/SELECTED TOOL:\s*([\s\S]*?)(?=\nREASONING:|$)/);
     const reasoningMatch = selection.match(/REASONING:\s*([\s\S]*?)$/);
@@ -201,7 +203,8 @@ class LLMFormatting implements LLMFormattingInterface {
   async analyzeModifications(
     userFeedback: string,
     originalTool: string,
-    originalParameters: any
+    originalParameters: any,
+    model?: string
   ): Promise<{
     changes: any;
     reasoning: string;
@@ -229,7 +232,7 @@ class LLMFormatting implements LLMFormattingInterface {
            NEW_PARAMETERS: [JSON object with the updated parameters that should be used]
            `;
 
-    const analysis = await this.callLLM(prompt);
+    const analysis = await this.callLLM(prompt, model);
     
     const changesMatch = analysis.match(/CHANGES:\s*(\{[\s\S]*?\})/);
     const reasoningMatch = analysis.match(/REASONING:\s*([\s\S]*?)(?=\nNEW_PARAMETERS:|$)/);

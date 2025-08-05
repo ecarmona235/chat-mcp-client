@@ -1,5 +1,4 @@
 import { ChatMessage, ChatProvider, ChatContent } from '@/lib/types/chat';
-import { env } from '@/app/config/env';
 
 export abstract class BaseProvider implements ChatProvider {
   abstract name: string;

@@ -1,76 +1,77 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { BaseProvider } from './baseProvider';
 import { ChatMessage, ChatContent } from '@/lib/types/chat';
 import { env } from "@/app/config/env";
 import { Logger } from "@/app/utils/logger";
+import { DynamicFlow } from '@/lib/interfaces/DynamicFlowInterface';
+import { DynamicDiscovery } from '@/lib/interfaces/DynamicDiscoveryInterface';
+import { DynamicExecution } from '@/lib/interfaces/DynamicExecutionInterface';
+import { LLMFormatting } from '@/lib/interfaces/LLMFormattingInterface';
+import { Transparency } from '@/lib/interfaces/TransparencyInterface';
+import { Consent } from '@/lib/interfaces/ConsentInterface';
 
 const logger = new Logger("ClaudeProvider");
-
 
 export class ClaudeProvider extends BaseProvider {
   name = 'claude';
   models = ['Claude-Haiku-3', 'Claude-Haiku-3-5', 'Claude-Sonnet-4', 'Claude-Sonnet-3-7', 'Claude-Opus-4'];
-  private client: Anthropic | null = null;
+  private dynamicFlow: DynamicFlow; 
+
+  constructor() {
+    super();
+    // Initialize DynamicFlow with all dependencies
+    this.dynamicFlow = new (DynamicFlow as any)(
+      new (DynamicDiscovery as any)(),
+      new (DynamicExecution as any)(),
+      new (LLMFormatting as any)(),
+      new (Transparency as any)(),
+      new (Consent as any)()
+    );
+  }
 
   protected getApiKey(): string | null {
     return env.ANTHROPIC_API_KEY || null;
   }
 
-  private getClient(): Anthropic {
-    if (!this.client) {
-      const apiKey = this.getApiKey();
-      if (!apiKey) throw new Error('Anthropic API key not found');
-      this.client = new Anthropic({ apiKey });
-    }
-    return this.client;
-  }
-
   async sendMessage(messages: ChatMessage[], model: string): Promise<ChatContent[]> {
     try {
-      const client = this.getClient();
-      const selectedModel = model === 'auto' ? 'Claude-Haiku-3' : (model || 'Claude-Haiku-3');
-      const response = await client.messages.create({
-        model: selectedModel,
-        messages: this.formatMessages(messages),
-        max_tokens: 1000
-      });
+      // Extract user request from messages
+      const userRequest = this.extractUserRequest(messages);
       
-      return this.parseClaudeResponse(response.content);
+      if (!userRequest) {
+        return [{
+          type: 'text',
+          content: 'I couldn\'t understand your request. Please try again.'
+        }];
+      }
+      
+      // Delegate to DynamicFlow for tool orchestration
+      const response = await this.dynamicFlow.processUserRequest(userRequest, model);
+      
+      return [{
+        type: 'text',
+        content: response
+      }];
     } catch (error) {
-      throw new Error(`Claude request failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      logger.error('Claude provider error:', error);
+      return [{
+        type: 'text',
+        content: `I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      }];
     }
   }
 
-  private parseClaudeResponse(content: any[]): ChatContent[] {
-    return content.map(item => {
-      if ('text' in item) {
-        return {
-          type: 'text',
-          content: item.text
-        };
-      } else if ('source' in item) {
-        return {
-          type: 'image',
-          content: {
-            url: item.source.url,
-            mimeType: item.source.type
-          }
-        };
-      } else if ('type' in item && item.type === 'tool_use') {
-        return {
-          type: 'tool',
-          content: {
-            id: item.id,
-            name: item.name,
-            input: item.input
-          }
-        };
-      } else {
-        return {
-          type: 'text',
-          content: 'Unsupported content type'
-        };
+  private extractUserRequest(messages: ChatMessage[]): string {
+    // Extract the user's request from the conversation
+    const userMessages = messages.filter(msg => msg.role === 'user');
+    const lastUserMessage = userMessages[userMessages.length - 1];
+    
+    if (lastUserMessage && lastUserMessage.content.length > 0) {
+      const content = lastUserMessage.content[0];
+      if (content.type === 'text') {
+        return content.content as string;
       }
-    });
+    }
+    
+    return '';
   }
 }

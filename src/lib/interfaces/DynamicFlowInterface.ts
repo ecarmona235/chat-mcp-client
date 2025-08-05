@@ -45,9 +45,9 @@ class DynamicFlow {
 
 
 
-  private async predictOutcome(toolName: string, parameters: any): Promise<string> {
+  private async predictOutcome(toolName: string, parameters: any, model?: string): Promise<string> {
     try {
-      const analysis = await this.llmFormatting.analyzeToolOutcome(toolName, parameters);
+      const analysis = await this.llmFormatting.analyzeToolOutcome(toolName, parameters, model);
       return analysis.userExplanation;
     } catch (error) {
       // Fallback if analysis fails
@@ -55,9 +55,9 @@ class DynamicFlow {
     }
   }
 
-  private async assessRisks(toolName: string, parameters: any): Promise<{risks: string[], shouldBlock: boolean}> {
+  private async assessRisks(toolName: string, parameters: any, model?: string): Promise<{risks: string[], shouldBlock: boolean}> {
     try {
-      const analysis = await this.llmFormatting.analyzeToolOutcome(toolName, parameters);
+      const analysis = await this.llmFormatting.analyzeToolOutcome(toolName, parameters, model);
       
       const risks = [];
       let shouldBlock = false;
@@ -95,13 +95,14 @@ class DynamicFlow {
 
 
 
-  private async executeModifiedPlan(modifiedPlan: any): Promise<string> {
+  private async executeModifiedPlan(modifiedPlan: any, model?: string): Promise<string> {
     try {
       // 1. Analyze user feedback to understand what they want changed
       const modificationAnalysis = await this.llmFormatting.analyzeModifications(
         modifiedPlan.userFeedback,
         modifiedPlan.originalTool,
-        modifiedPlan.originalParameters
+        modifiedPlan.originalParameters,
+        model
       );
       
       // 2. Create new plan with modifications
@@ -172,7 +173,7 @@ class DynamicFlow {
     }
   }
 
-  async processUserRequest(originalUserRequest: string): Promise<string> {
+  async processUserRequest(originalUserRequest: string, model: string = 'auto'): Promise<string> {
     // Check for stop commands from the original human user
     if (this.isStopCommand(originalUserRequest)) {
       // Cancel current execution if one is running
@@ -187,7 +188,7 @@ class DynamicFlow {
     const availableTools = await this.discovery.findToolsByCapability(originalUserRequest);
     
     // Step 2: Select best tool using LLM
-    const toolSelection = await this.llmFormatting.selectTool(originalUserRequest, availableTools);
+    const toolSelection = await this.llmFormatting.selectTool(originalUserRequest, availableTools, model);
     
     if (!toolSelection.selectedTool) {
       return "I couldn't find a suitable tool for your request. Please try rephrasing your request.";
@@ -200,7 +201,8 @@ class DynamicFlow {
     return await this.executeDynamicFlow(
       toolSelection.selectedTool,
       {}, // Parameters will be extracted by the calling LLM
-      originalUserRequest
+      originalUserRequest,
+      model
     );
   }
 
@@ -209,7 +211,8 @@ class DynamicFlow {
   async executeDynamicFlow(
     llmSelectedTool: string,
     llmExtractedParameters: any,
-    originalUserRequest: string
+    originalUserRequest: string,
+    model: string = 'auto'
   ): Promise<string> {
     // Check for stop commands from the original human user
     if (this.isStopCommand(originalUserRequest)) {
@@ -222,8 +225,8 @@ class DynamicFlow {
     }
     
     // Step 1: Create Execution Plan
-    const expectedOutcome = await this.predictOutcome(llmSelectedTool, llmExtractedParameters);
-    const riskAssessment = await this.assessRisks(llmSelectedTool, llmExtractedParameters);
+    const expectedOutcome = await this.predictOutcome(llmSelectedTool, llmExtractedParameters, model);
+    const riskAssessment = await this.assessRisks(llmSelectedTool, llmExtractedParameters, model);
     
     // Step 2: Handle Consent Based on Risk Level
     if (riskAssessment.shouldBlock) {
@@ -251,24 +254,26 @@ class DynamicFlow {
         // User approved - proceed with execution
         const result = await this.execution.executeTool(llmSelectedTool, llmExtractedParameters);
         this.currentExecutionId = result.executionId;
-        const response = await this.llmFormatting.formatResponseWithLLM(result.result, { originalUserRequest, toolUsed: llmSelectedTool });
+        const response = await this.llmFormatting.formatResponseWithLLM(result.result, { originalUserRequest, toolUsed: llmSelectedTool }, model);
         this.currentExecutionId = null; // Clear after completion
         return response;
       } else if (consentResult.modificationRequested) {
         // User wants modifications
         const modifiedPlan = await this.consent.handleModificationRequest(consentResult.userFeedback);
-        return await this.executeModifiedPlan(modifiedPlan);
+        return await this.executeModifiedPlan(modifiedPlan, model);
       } else {
         // User rejected
         return await this.consent.handleRejection(consentResult.reason);
       }
-    } else {
-      // Low risk operation - proceed directly without consent
-      const result = await this.execution.executeTool(llmSelectedTool, llmExtractedParameters);
-      this.currentExecutionId = result.executionId;
-      const response = await this.llmFormatting.formatResponseWithLLM(result.result, { originalUserRequest, toolUsed: llmSelectedTool });
-      this.currentExecutionId = null; // Clear after completion
-      return response;
-    }
+          } else {
+        // Low risk operation - proceed directly without consent
+        const result = await this.execution.executeTool(llmSelectedTool, llmExtractedParameters);
+        this.currentExecutionId = result.executionId;
+        const response = await this.llmFormatting.formatResponseWithLLM(result.result, { originalUserRequest, toolUsed: llmSelectedTool }, model);
+        this.currentExecutionId = null; // Clear after completion
+        return response;
+      }
   }
-  }
+}
+
+export { DynamicFlow };
