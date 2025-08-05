@@ -11,7 +11,7 @@ export function useChat() {
   });
 
   const [providerIndex, setProviderIndex] = useState(0);
-  const availableProviders = ['openai', 'gemini'];
+  const availableProviders = ['openai',  'gemini']; // 'claude',
 
   const getNextProvider = useCallback(() => {
     const nextIndex = (providerIndex + 1) % availableProviders.length;
@@ -105,11 +105,11 @@ export function useChat() {
 
   const getAvailableModels = useCallback((provider: string) => {
     // Hardcoded models for now - could be fetched from API if needed
-          const modelMap: Record<string, string[]> = {
-        openai: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4o', 'gpt-4o-mini'],
-        // claude: ['Claude-Haiku-3', 'Claude-Haiku-3-5', 'Claude-Sonnet-4', 'Claude-Sonnet-3-7', 'Claude-Opus-4'],
-        gemini: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-Pro']
-      };
+    const modelMap: Record<string, string[]> = {
+      openai: ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4o', 'gpt-4o-mini'],
+      claude: ['Claude-Haiku-3', 'Claude-Haiku-3-5', 'Claude-Sonnet-4', 'Claude-Sonnet-3-7', 'Claude-Opus-4'],
+      gemini: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-Pro']
+    };
     return modelMap[provider] || [];
   }, []);
 

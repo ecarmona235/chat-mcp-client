@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ProviderFactory } from '@/services/providers/providerFactory';
+import { ProviderFactory } from '@/services/providerFactory';
 import { ChatMessage } from '@/lib/types/chat';
 
 export async function POST(request: NextRequest) {
@@ -16,26 +16,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Add system message about MCP capabilities if this is the first message
-    const enhancedMessages = messages.length === 1 ? [
-      {
-        role: 'system',
-        content: [{
-          type: 'text',
-          content: `You have access to MCP (Model Context Protocol) tools. You can:
-1. Get available tools: Make a GET request to /api/mcp-tools
-2. Execute tools: Make a POST request to /api/mcp-call-tool with {"toolName": "tool_name", "args": {...}}
-3. Get resources: Make a GET request to /api/mcp-resources
-
-When you need to use a tool, first fetch its schema to understand the required parameters.`
-        }],
-        timestamp: new Date()
-      },
-      ...messages
-    ] : messages;
-
-    console.log('Enhanced messages being sent to provider:', JSON.stringify(enhancedMessages, null, 2));
-    const response = await providerInstance.sendMessage(enhancedMessages, model);
+    console.log('Messages being sent to provider:', JSON.stringify(messages, null, 2));
+    const response = await providerInstance.sendMessage(messages, model);
 
     return NextResponse.json({ success: true, content: response });
   } catch (error) {

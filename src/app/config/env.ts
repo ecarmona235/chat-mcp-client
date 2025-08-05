@@ -24,7 +24,7 @@ const validateEnv = () => {
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
       GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
-      MCP_SERVERS: process.env.MCP_SERVERS || ["http://localhost:3001/mcp"],
+      MCP_SERVERS: process.env.MCP_SERVERS?.split(",") || ["http://localhost:3001/mcp"],
       // Cache service configuration
       REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",
       CHROMA_URL: process.env.CHROMA_URL || "http://localhost:8000",
