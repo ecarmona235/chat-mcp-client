@@ -77,8 +77,20 @@ export class CacheService {
    * Store LLM analysis results
    */
   async setLLMAnalysis(cacheKey: string, analysis: any): Promise<void> {
+    console.log('Memory usage before setLLMAnalysis:', {
+      rss: Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB',
+      heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
+      heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + 'MB'
+    });
+
     const key = `${REDIS_KEYS.LLM_ANALYSIS}${cacheKey}`;
     await this.redis.setex(key, CACHE_TTL.LLM_ANALYSIS, JSON.stringify(analysis));
+    
+    console.log('Memory usage after setLLMAnalysis:', {
+      rss: Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB',
+      heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
+      heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + 'MB'
+    });
   }
 
   /**
@@ -304,6 +316,18 @@ export class CacheService {
     const chromaHealth = this.toolsCollection !== null;
     
     return { redis: redisHealth, chroma: chromaHealth };
+  }
+
+  /**
+   * Get current memory usage statistics
+   */
+  getMemoryUsage(): {rss: string, heapUsed: string, heapTotal: string} {
+    const usage = process.memoryUsage();
+    return {
+      rss: Math.round(usage.rss / 1024 / 1024) + 'MB',
+      heapUsed: Math.round(usage.heapUsed / 1024 / 1024) + 'MB',
+      heapTotal: Math.round(usage.heapTotal / 1024 / 1024) + 'MB'
+    };
   }
 
   /**

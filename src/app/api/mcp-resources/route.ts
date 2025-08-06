@@ -5,7 +5,6 @@ import { env } from '@/app/config/env';
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const serverName = searchParams.get('server');
-  
   if (!serverName) {
     return NextResponse.json(
       { success: false, error: 'Server parameter is required' },
@@ -13,6 +12,7 @@ export async function GET(request: Request) {
     );
   }
 
+  
   // Find the server URL from environment
   const serverUrl = env.MCP_SERVERS.find(server => server === serverName);
   

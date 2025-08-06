@@ -10,8 +10,10 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.57.0",
+    "@chroma-core/default-embed": "^0.1.8",
     "@google/generative-ai": "^0.24.1",
     "@modelcontextprotocol/sdk": "^1.17.0",
+    "chroma": "^0.0.1",
     "chromadb": "^3.0.10",
     "dotenv": "^17.2.1",
     "ioredis": "^5.6.1",

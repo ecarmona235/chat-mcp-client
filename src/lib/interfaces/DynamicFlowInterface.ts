@@ -184,20 +184,35 @@ class DynamicFlow {
       return "Stopped processing. How can I help you?";
     }
 
-    // Step 1: Discover relevant tools using semantic search
-    const availableTools = await this.discovery.findToolsByCapability(originalUserRequest);
+    // Step 1: Single LLM call to analyze request and provide response or indicate tools needed
+    const analysis = await this.llmFormatting.analyzeRequest(originalUserRequest, model);
     
-    // Step 2: Select best tool using LLM
-    const toolSelection = await this.llmFormatting.selectTool(originalUserRequest, availableTools, model);
-    
-    if (!toolSelection.selectedTool) {
-      return "I couldn't find a suitable tool for your request. Please try rephrasing your request.";
+    if (!analysis.needsTools) {
+      // LLM provided direct response
+      console.log('LLM provided direct conversational response');
+      return analysis.response || 'I\'m here to help!';
     }
 
-    // Note: Parameter extraction is handled by the LLM that calls this method
-    // The parameters are passed in as llmExtractedParameters
+    // Step 2: LLM indicated tools are needed - check if tools are available
+    const allTools = await this.discovery.getAllTools();
+    
+    if (allTools.length === 0) {
+      console.log('LLM requested tools but none are available');
+      return "I'm unable to access the MCP tools at the moment. They may be temporarily unavailable. I can still help you with general questions and conversation!";
+    }
 
-    // Step 4: Execute the dynamic flow with selected tool and parameters
+    // Step 3: Discover relevant tools using semantic search
+    const availableTools = await this.discovery.findToolsByCapability(originalUserRequest);
+    
+    // Step 4: Let LLM select the best tool
+    const toolSelection = await this.llmFormatting.selectTool(originalUserRequest, availableTools, model);
+    
+    if (!toolSelection.selectedTool || toolSelection.selectedTool === 'none') {
+      // LLM decided no tools needed - provide conversational response
+      return await this.llmFormatting.getConversationalResponse(originalUserRequest, model);
+    }
+
+    // Step 5: Execute the dynamic flow with selected tool and parameters
     return await this.executeDynamicFlow(
       toolSelection.selectedTool,
       {}, // Parameters will be extracted by the calling LLM
